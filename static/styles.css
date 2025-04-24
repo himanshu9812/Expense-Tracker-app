@@ -1,0 +1,56 @@
+body {
+    background-color: #f5f5f5;
+    font-size: 12px;
+  }
+  
+  .expense-card {
+    width: 50%;
+    margin: auto;
+    border-radius: 12px;
+    padding: 10px;
+  }
+  
+  @media (max-width: 768px) {
+    .expense-card {
+      width: 90%;
+    }
+  }
+  
+  
+  .card-header h4 {
+    font-size: 16px;
+    margin: 0;
+  }
+  
+  input.form-control-sm,
+  button.btn-sm {
+    font-size: 12px;
+    height: 30px;
+    padding: 4px 8px;
+  }
+  
+  .w-48 {
+    width: 48%;
+  }
+  
+  #remaining {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  
+  #expenseList .list-group-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+  }
+  
+  #expenseList .list-group-item span {
+    font-size: 13px;
+  }
+  
+  #expenseList button {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+  
