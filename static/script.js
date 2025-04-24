@@ -1,6 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
+import {
+  getFirestore, doc, setDoc, addDoc, getDoc, getDocs,
+  collection, updateDoc, deleteDoc, onSnapshot
+} from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
 
+// Firebase Config
 const firebaseConfig = {
   apiKey: "AIzaSyAj0GISGDAM6uP4u3rYthHCa9NIvHfOJYM",
   authDomain: "expense-tracker-c561a.firebaseapp.com",
@@ -10,10 +14,11 @@ const firebaseConfig = {
   appId: "1:305997067284:web:2f6fbbfac778439fa76301"
 };
 
+// Init Firebase
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const db = getFirestore(app);
 
-// DOM elements
+// DOM Elements
 const balanceForm = document.getElementById("balanceForm");
 const fixedInput = document.getElementById("fixedBalance");
 const remainingText = document.getElementById("remaining");
@@ -26,86 +31,86 @@ const expenseList = document.getElementById("expenseList");
 const resetBtn = document.getElementById("resetBtn");
 const addBalanceBtn = document.getElementById("addBalanceBtn");
 
-// Set initial balance and remaining
-balanceForm.addEventListener("submit", (e) => {
+// Set Initial Balance
+balanceForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const value = parseInt(fixedInput.value);
   if (!isNaN(value)) {
-    set(ref(db), {
+    await setDoc(doc(db, "meta", "info"), {
       balance: value,
-      remaining: value,
-      expenses: {} // optional if you want to clear old expenses
+      remaining: value
     });
     fixedInput.value = "";
   }
 });
 
-// Add more balance to remaining
-addBalanceBtn.addEventListener("click", () => {
+// Add to Remaining
+addBalanceBtn.addEventListener("click", async () => {
   const additional = parseInt(fixedInput.value);
   if (!isNaN(additional)) {
-    const remainingRef = ref(db, "remaining");
-    onValue(remainingRef, (snapshot) => {
-      const current = snapshot.val() || 0;
-      set(remainingRef, current + additional);
+    const docRef = doc(db, "meta", "info");
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const current = docSnap.data().remaining || 0;
+      await updateDoc(docRef, { remaining: current + additional });
       fixedInput.value = "";
-    }, { onlyOnce: true });
+    }
   }
 });
 
-// Add expense and deduct from remaining
-expenseForm.addEventListener("submit", (e) => {
+// Add Expense
+expenseForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const title = titleInput.value.trim();
   const amount = parseInt(amountInput.value);
 
   if (title && !isNaN(amount)) {
-    // Deduct from remaining first
-    const remainingRef = ref(db, "remaining");
-    onValue(remainingRef, (snapshot) => {
-      const current = snapshot.val() || 0;
+    const docRef = doc(db, "meta", "info");
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const current = docSnap.data().remaining || 0;
       if (amount <= current) {
-        // Deduct remaining and save expense
-        set(remainingRef, current - amount);
-
-        const newRef = push(ref(db, "expenses"));
-        set(newRef, { title, amount });
-
+        await updateDoc(docRef, { remaining: current - amount });
+        await addDoc(collection(db, "expenses"), { title, amount });
         titleInput.value = "";
         amountInput.value = "";
       } else {
         alert("Not enough balance!");
       }
-    }, { onlyOnce: true });
+    }
   }
 });
 
-// Delete expense (adds back to remaining)
-function deleteExpense(id, amount) {
-  const remainingRef = ref(db, "remaining");
-  onValue(remainingRef, (snapshot) => {
-    const current = snapshot.val() || 0;
-    set(remainingRef, current + amount);
-    remove(ref(db, `expenses/${id}`));
-  }, { onlyOnce: true });
+// Delete Expense and Add Back Amount
+async function deleteExpense(id, amount) {
+  const docRef = doc(db, "meta", "info");
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    const current = docSnap.data().remaining || 0;
+    await updateDoc(docRef, { remaining: current + amount });
+    await deleteDoc(doc(db, "expenses", id));
+  }
 }
 
-// Reset balance and expenses
-resetBtn.addEventListener("click", () => {
-  set(ref(db), {});
+// Reset All
+resetBtn.addEventListener("click", async () => {
+  await setDoc(doc(db, "meta", "info"), {});
+  const expenseSnapshot = await getDocs(collection(db, "expenses"));
+  for (const docSnap of expenseSnapshot.docs) {
+    await deleteDoc(doc(db, "expenses", docSnap.id));
+  }
 });
 
-// Update UI
+// Update UI in Real-Time
 function updateDisplay() {
-  onValue(ref(db), (snapshot) => {
-    const data = snapshot.val() || {};
-    const remaining = data?.remaining || 0;
-    const expenses = data?.expenses || {};
+  onSnapshot(doc(db, "meta", "info"), (docSnap) => {
+    remainingText.textContent = docSnap.exists() ? docSnap.data().remaining || 0 : 0;
+  });
 
-    remainingText.textContent = remaining;
-
+  onSnapshot(collection(db, "expenses"), (snapshot) => {
     expenseList.innerHTML = "";
-    for (const [id, { title, amount }] of Object.entries(expenses)) {
+    snapshot.forEach((docSnap) => {
+      const { title, amount } = docSnap.data();
       const li = document.createElement("li");
       li.className = "list-group-item d-flex justify-content-between align-items-center";
       li.innerHTML = `
@@ -114,9 +119,9 @@ function updateDisplay() {
           <span class="me-3">₹${amount}</span>
           <button class="btn btn-sm btn-danger">Delete</button>
         </div>`;
-      li.querySelector("button").addEventListener("click", () => deleteExpense(id, amount));
+      li.querySelector("button").addEventListener("click", () => deleteExpense(docSnap.id, amount));
       expenseList.appendChild(li);
-    }
+    });
   });
 }
 
